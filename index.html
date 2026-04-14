@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LA 2028 Olympics — Family Ticket Planner</title>
+<style>
+  :root {
+    --gold: #D4AF37; --navy: #1a1a2e; --blue: #16213e; --accent: #e94560;
+    --green: #4ecca3; --bg: #0f0f23; --card: #1a1a2e; --text: #eee;
+    --muted: #999; --border: #333;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height:100vh; }
+
+  header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    padding: 2rem; text-align: center; border-bottom: 3px solid var(--gold);
+  }
+  header h1 { font-size: 2.2rem; color: var(--gold); letter-spacing: 2px; }
+  header p { color: var(--muted); margin-top: 0.5rem; font-size: 1rem; }
+  .last-updated { font-size: 0.8rem; color: var(--green); margin-top: 0.4rem; }
+
+  .tabs {
+    display: flex; background: var(--navy); border-bottom: 1px solid var(--border);
+    overflow-x: auto; position: sticky; top: 0; z-index: 100;
+  }
+  .tab {
+    padding: 1rem 1.5rem; cursor: pointer; border: none; background: none;
+    color: var(--muted); font-size: 0.95rem; white-space: nowrap; transition: all 0.2s;
+    border-bottom: 3px solid transparent;
+  }
+  .tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--card); border-radius: 12px; padding: 1.2rem; border: 1px solid var(--border); text-align: center; }
+  .stat-card .num { font-size: 1.8rem; font-weight: 700; color: var(--gold); }
+  .stat-card .label { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; text-transform: uppercase; letter-spacing: 1px; }
+
+  .avail-legend {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+    padding: 0.8rem 1rem; background: rgba(255,255,255,0.03); border-radius: 8px; margin-bottom: 1rem; font-size: 0.8rem; color: var(--muted);
+  }
+  .avail { display:inline-flex; align-items:center; gap:0.3rem; padding:0.25rem 0.6rem; border-radius:20px; font-size:0.75rem; font-weight:700; white-space:nowrap; }
+  .avail-soldout  { background:rgba(233,69,96,0.15);   color:#ff4466; border:1px solid rgba(233,69,96,0.4); }
+  .avail-premium  { background:rgba(255,140,0,0.15);   color:#ff9922; border:1px solid rgba(255,140,0,0.4); }
+  .avail-limited  { background:rgba(255,204,0,0.15);   color:#ffcc00; border:1px solid rgba(255,204,0,0.4); }
+  .avail-available{ background:rgba(78,204,163,0.15);  color:#4ecca3; border:1px solid rgba(78,204,163,0.4); }
+  .avail-free     { background:rgba(100,160,255,0.15); color:#66aaff; border:1px solid rgba(100,160,255,0.4); }
+  .avail-unknown  { background:rgba(150,150,150,0.1);  color:#888;    border:1px solid rgba(150,150,150,0.3); }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 1.5rem; align-items: center; }
+  .filters input, .filters select {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.9rem; outline: none;
+  }
+  .filters input:focus, .filters select:focus { border-color: var(--gold); }
+  .filters input { flex: 1; min-width: 200px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
+  thead { background: var(--blue); }
+  th { padding: 0.9rem 1rem; text-align: left; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { color: #fff; }
+  td { padding: 0.8rem 1rem; border-top: 1px solid var(--border); font-size: 0.9rem; }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+
+  .priority-star { cursor: pointer; font-size: 1.2rem; transition: transform 0.2s; }
+  .priority-star:hover { transform: scale(1.3); }
+  .priority-star.filled { color: var(--gold); }
+  .priority-star.empty  { color: var(--border); }
+
+  .tag { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+  .tag-marquee  { background: rgba(233,69,96,0.2);   color: var(--accent); }
+  .tag-team     { background: rgba(78,204,163,0.2);  color: var(--green); }
+  .tag-ceremony { background: rgba(212,175,55,0.2);  color: var(--gold); }
+  .tag-new      { background: rgba(100,100,255,0.2); color: #8888ff; }
+  .tag-other    { background: rgba(150,150,150,0.2); color: var(--muted); }
+
+  .price-low  { color: var(--green); }
+  .price-high { color: var(--accent); }
+
+  /* Priority list */
+  .priority-list { list-style: none; }
+  .priority-item {
+    display: flex; align-items: center; gap: 1rem; padding: 1rem;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 0.6rem;
+  }
+  .priority-item:hover { border-color: var(--gold); }
+  .priority-item .rank { font-size: 1.4rem; font-weight: 700; color: var(--gold); min-width: 2rem; }
+  .priority-item .info { flex: 1; }
+  .priority-item .info h4 { margin-bottom: 0.2rem; }
+  .priority-item .info p { font-size: 0.85rem; color: var(--muted); }
+  .remove-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 1.2rem; padding: 0.3rem; }
+
+  /* Budget */
+  .budget-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 768px) { .budget-grid { grid-template-columns: 1fr; } }
+  .budget-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+  .budget-card h3 { color: var(--gold); margin-bottom: 1rem; }
+  .budget-total { font-size: 2.5rem; font-weight: 700; text-align: center; padding: 1rem; }
+  .budget-bar { height: 12px; background: var(--border); border-radius: 6px; overflow: hidden; margin: 0.5rem 0; }
+  .budget-fill { height: 100%; border-radius: 6px; transition: width 0.5s; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 2rem; }
+  .timeline::before { content: ''; position: absolute; left: 0.6rem; top: 0; bottom: 0; width: 2px; background: var(--border); }
+  .timeline-item { position: relative; margin-bottom: 1.5rem; padding: 1rem 1.5rem; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+  .timeline-item::before { content: ''; position: absolute; left: -1.6rem; top: 1.2rem; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--gold); background: var(--bg); }
+  .timeline-item.past::before    { background: var(--green); border-color: var(--green); }
+  .timeline-item.current::before { background: var(--gold); border-color: var(--gold); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(212,175,55,0.4); } 50% { box-shadow: 0 0 0 8px rgba(212,175,55,0); } }
+  .timeline-item h4 { color: var(--gold); margin-bottom: 0.3rem; }
+  .timeline-item .date { font-size: 0.85rem; color: var(--muted); }
+
+  /* Seating */
+  .seating-viz { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; text-align: center; }
+  .stage-area { width: 60%; margin: 0 auto 2rem; padding: 1.5rem; border-radius: 50%; background: rgba(78,204,163,0.15); border: 2px dashed var(--green); font-size: 0.9rem; color: var(--green); }
+  .seating-tiers { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
+  .tier-row { display: flex; align-items: center; gap: 1rem; padding: 0.8rem 1.5rem; border-radius: 8px; width: 100%; justify-content: space-between; transition: all 0.2s; }
+  .tier-row:hover { transform: scale(1.01); }
+  .tier-label { font-weight: 600; min-width: 160px; }
+  .tier-price { font-weight: 700; min-width: 120px; text-align: right; }
+  .tier-bar { flex: 1; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.1); overflow: hidden; }
+  .tier-bar-fill { height: 100%; border-radius: 4px; }
+  .tier-family { min-width: 130px; text-align: right; font-size: 0.85rem; color: var(--muted); }
+  .legend { display: flex; gap: 1.5rem; justify-content: center; margin-top: 1.5rem; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+  /* Notes */
+  .sync-notice { background: rgba(78,204,163,0.1); border: 1px solid rgba(78,204,163,0.3); border-radius: 10px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem; font-size: 0.9rem; }
+  .notes-area { width: 100%; min-height: 120px; background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 1rem; border-radius: 8px; font-family: inherit; font-size: 0.9rem; resize: vertical; margin-top: 0.5rem; }
+  .notes-area:focus { border-color: var(--gold); outline: none; }
+
+  .btn { padding: 0.6rem 1.2rem; border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: all 0.2s; }
+  .btn-gold    { background: var(--gold); color: #000; }
+  .btn-gold:hover    { background: #e6c347; }
+  .btn-outline { background: none; border: 1px solid var(--gold); color: var(--gold); }
+  .btn-outline:hover { background: rgba(212,175,55,0.1); }
+  .export-row { display: flex; gap: 0.8rem; margin: 1.5rem 0; flex-wrap: wrap; }
+
+  footer { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+  a { color: var(--gold); }
+
+  .loading-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; gap: 1rem; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <p style="color:var(--muted)">Loading latest availability data…</p>
+</div>
+
+<header>
+  <div style="font-size:1.5rem;">&#127941;</div>
+  <h1>LA 2028 OLYMPICS</h1>
+  <p>Family Ticket Planner &mdash; 2 Adults + 2 Kids &nbsp;|&nbsp; July 14–30, 2028</p>
+  <p class="last-updated" id="last-updated-header">Loading availability data…</p>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="showPanel('events',this)">All Events</button>
+  <button class="tab" onclick="showPanel('priorities',this)">Our Priority List</button>
+  <button class="tab" onclick="showPanel('budget',this)">Budget Tracker</button>
+  <button class="tab" onclick="showPanel('seating',this)">Seating &amp; Tiers</button>
+  <button class="tab" onclick="showPanel('timeline',this)">Ticket Timeline</button>
+  <button class="tab" onclick="showPanel('notes',this)">Family Notes</button>
+</div>
+
+<div class="container">
+
+<!-- EVENTS -->
+<div id="events" class="panel active">
+  <div class="stats-bar">
+    <div class="stat-card"><div class="num">36</div><div class="label">Sports</div></div>
+    <div class="stat-card"><div class="num">800+</div><div class="label">Events</div></div>
+    <div class="stat-card"><div class="num">40+</div><div class="label">Venues</div></div>
+    <div class="stat-card"><div class="num" id="starred-count">0</div><div class="label">Starred</div></div>
+  </div>
+
+  <div class="avail-legend">
+    <strong style="color:var(--text);">Drop 1 Availability</strong> — auto-updated from Reddit &amp; news:&nbsp;
+    <span class="avail avail-soldout">🔴 Sold Out</span>
+    <span class="avail avail-premium">🟠 Premium Only</span>
+    <span class="avail avail-limited">🟡 Limited</span>
+    <span class="avail avail-available">🟢 Available</span>
+    <span class="avail avail-free">🔵 Free</span>
+    <span class="avail avail-unknown">⚪ Unknown</span>
+    &nbsp;|&nbsp; <span id="avail-source" style="font-style:italic;"></span>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="search" placeholder="Search events, venues…" oninput="filterTable()">
+    <select id="cat-f" onchange="filterTable()">
+      <option value="">All Categories</option>
+      <option value="marquee">Marquee</option>
+      <option value="team">Team Sports</option>
+      <option value="ceremony">Ceremonies</option>
+      <option value="new">New Sports</option>
+      <option value="other">Other</option>
+    </select>
+    <select id="avail-f" onchange="filterTable()">
+      <option value="">All Availability</option>
+      <option value="soldout">🔴 Sold Out</option>
+      <option value="premium">🟠 Premium Only</option>
+      <option value="limited">🟡 Limited</option>
+      <option value="available">🟢 Available</option>
+      <option value="free">🔵 Free</option>
+    </select>
+    <select id="price-f" onchange="filterTable()">
+      <option value="">All Prices</option>
+      <option value="budget">Under $100</option>
+      <option value="mid">$100–$500</option>
+      <option value="premium-price">$500–$1,000</option>
+      <option value="vip">$1,000+</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;color:var(--muted);cursor:pointer;">
+      <input type="checkbox" id="starred-only" onchange="filterTable()"> ⭐ Starred only
+    </label>
+  </div>
+
+  <table id="events-table">
+    <thead>
+      <tr>
+        <th style="width:40px;">⭐</th>
+        <th onclick="sortTable(1)">Sport / Event ↕</th>
+        <th onclick="sortTable(2)">Category ↕</th>
+        <th onclick="sortTable(3)">Venue ↕</th>
+        <th onclick="sortTable(4)">Dates ↕</th>
+        <th onclick="sortTable(5)">Per Ticket ↕</th>
+        <th onclick="sortTable(6)">Family of 4 ↕</th>
+        <th onclick="sortTable(7)" title="Hover for source">Availability ↕ ℹ</th>
+        <th onclick="sortTable(8)">Kids ↕</th>
+      </tr>
+    </thead>
+    <tbody id="events-body"></tbody>
+  </table>
+</div>
+
+<!-- PRIORITIES -->
+<div id="priorities" class="panel">
+  <div class="sync-notice">
+    <span style="font-size:1.3rem;">📡</span>
+    <div>
+      <strong>Shared Planning</strong> — this page is live at
+      <a href="https://reedberg99.github.io/la28-planner/" target="_blank">reedberg99.github.io/la28-planner</a>.
+      Both you and your wife can open it anywhere. Use Export/Import to sync starred lists between devices.
+    </div>
+  </div>
+  <div class="export-row">
+    <button class="btn btn-gold" onclick="exportData()">Export My List (JSON)</button>
+    <button class="btn btn-outline" onclick="importData()">Import List (JSON)</button>
+    <button class="btn btn-outline" onclick="clearAll()">Clear All</button>
+  </div>
+  <p style="color:var(--muted);margin-bottom:1rem;font-size:0.9rem;">Star events in "All Events" to add them here.</p>
+  <ul class="priority-list" id="priority-list"></ul>
+  <div id="priority-empty" style="text-align:center;padding:3rem;color:var(--muted);">
+    <p style="font-size:1.5rem;margin-bottom:0.5rem;">⭐</p>
+    <p>No events starred yet.</p>
+  </div>
+  <div style="margin-top:1.5rem;" id="priority-budget-summary"></div>
+</div>
+
+<!-- BUDGET -->
+<div id="budget" class="panel">
+  <div class="budget-grid">
+    <div class="budget-card">
+      <h3>Total Budget</h3>
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
+        <span style="color:var(--muted);">$</span>
+        <input type="number" id="total-budget" value="5000" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.6rem;border-radius:8px;font-size:1.2rem;width:150px;" oninput="updateBudget()">
+      </div>
+      <div class="budget-bar"><div class="budget-fill" id="budget-fill" style="width:0%;background:var(--green);"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:var(--muted);margin-top:0.3rem;">
+        <span>Spent: $<span id="budget-spent">0</span></span>
+        <span>Remaining: $<span id="budget-remaining">5000</span></span>
+      </div>
+    </div>
+    <div class="budget-card">
+      <h3>Starred Events (mid-tier × 4)</h3>
+      <div class="budget-total" id="budget-starred-total" style="color:var(--green);">$0</div>
+      <p style="color:var(--muted);font-size:0.85rem;text-align:center;">All prices include 24% service fee</p>
+    </div>
+    <div class="budget-card"><h3>By Category</h3><div id="budget-breakdown"><p style="color:var(--muted)">Star events to see breakdown</p></div></div>
+    <div class="budget-card">
+      <h3>💡 Savings Tips</h3>
+      <ul style="list-style:none;font-size:0.9rem;">
+        <li style="padding:0.5rem 0;border-bottom:1px solid var(--border);">Prelim sessions cost 40–60% less than finals</li>
+        <li style="padding:0.5rem 0;border-bottom:1px solid var(--border);">$28 tickets still exist for lower-demand sports</li>
+        <li style="padding:0.5rem 0;border-bottom:1px solid var(--border);">Kids 2+ need their own ticket; under 2 free on laps</li>
+        <li style="padding:0.5rem 0;border-bottom:1px solid var(--border);">Verified resale launches 2027 — may find deals</li>
+        <li style="padding:0.5rem 0;">Triathlon + Road Cycling are FREE and spectacular for kids</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- SEATING -->
+<div id="seating" class="panel">
+  <select id="venue-selector" onchange="showVenueSeating()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:0.6rem 1rem;border-radius:8px;font-size:0.95rem;width:100%;max-width:450px;margin-bottom:1.5rem;">
+    <option value="coliseum">LA Memorial Coliseum — Track & Field (77,500 seats)</option>
+    <option value="sofi">SoFi Stadium — Swimming (38,000 seats)</option>
+    <option value="crypto">Crypto.com Arena — Gymnastics (20,000 seats)</option>
+    <option value="intuit">Intuit Dome — Basketball (18,000 seats)</option>
+    <option value="rosebowl">Rose Bowl — Soccer (90,888 seats)</option>
+    <option value="ceremony">SoFi Stadium — Opening/Closing Ceremonies</option>
+  </select>
+  <div class="seating-viz" id="seating-viz"></div>
+  <div class="legend" style="margin-top:1.5rem;">
+    <div class="legend-item"><div class="legend-dot" style="background:#ff4466;"></div>Cat A (Premium)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff8844;"></div>Cat B–C</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ffcc44;"></div>Cat D–E (Mid)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#44cc88;"></div>Cat F–G</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4488ff;"></div>Cat H–I (Value)</div>
+  </div>
+</div>
+
+<!-- TIMELINE -->
+<div id="timeline" class="panel">
+  <h2 style="color:var(--gold);margin-bottom:1.5rem;">Ticket Sales Timeline</h2>
+  <div class="timeline">
+    <div class="timeline-item past"><h4>LA &amp; OKC Locals Presale</h4><div class="date">Apr 2–6, 2026</div><p style="margin-top:0.5rem;font-size:0.9rem;">Exclusive early window. Tickets from $28. Sold out quickly for marquee events.</p></div>
+    <div class="timeline-item current"><h4>Drop 1 — Global Public Sale 🔴 ACTIVE</h4><div class="date">Apr 9–19, 2026</div><p style="margin-top:0.5rem;font-size:0.9rem;color:var(--accent);font-weight:600;">Active now — visit <a href="https://tickets.la28.org" target="_blank">tickets.la28.org</a> during your time slot.</p></div>
+    <div class="timeline-item"><h4>Additional Draw Registrations</h4><div class="date">Mid-2026 (TBA)</div><p style="margin-top:0.5rem;font-size:0.9rem;">Register for future drops. Dates TBA.</p></div>
+    <div class="timeline-item"><h4>Drop 2+ — More Inventory</h4><div class="date">Late 2026</div><p style="margin-top:0.5rem;font-size:0.9rem;">Additional drops with fresh stock.</p></div>
+    <div class="timeline-item"><h4>Paralympic Tickets On Sale</h4><div class="date">2027</div></div>
+    <div class="timeline-item"><h4>Verified Resale Launches</h4><div class="date">2027</div><p style="margin-top:0.5rem;font-size:0.9rem;">AXS, Eventim, Ticketmaster, Sports Illustrated Tickets.</p></div>
+    <div class="timeline-item"><h4>🎉 Games Begin!</h4><div class="date">July 14, 2028</div></div>
+  </div>
+</div>
+
+<!-- NOTES -->
+<div id="notes" class="panel">
+  <div class="sync-notice"><span style="font-size:1.3rem;">📝</span><div><strong>Family Notes</strong> — saved in your browser. Use Export to share with your wife.</div></div>
+  <h3 style="color:var(--gold);margin-bottom:0.5rem;">Reed's Notes</h3>
+  <textarea class="notes-area" id="notes-reed" placeholder="Your thoughts, must-see events…" oninput="saveNotes()"></textarea>
+  <h3 style="color:var(--gold);margin:1.5rem 0 0.5rem;">Partner's Notes</h3>
+  <textarea class="notes-area" id="notes-partner" placeholder="Partner's thoughts…" oninput="saveNotes()"></textarea>
+  <h3 style="color:var(--gold);margin:1.5rem 0 0.5rem;">Kids' Wishlist</h3>
+  <textarea class="notes-area" id="notes-kids" placeholder="What events are the kids most excited about?" oninput="saveNotes()"></textarea>
+  <h3 style="color:var(--gold);margin:1.5rem 0 0.5rem;">Accommodation / Logistics</h3>
+  <textarea class="notes-area" id="notes-logistics" placeholder="Hotel vs camper van, parking, travel plans…" oninput="saveNotes()"></textarea>
+  <div class="export-row" style="margin-top:1.5rem;">
+    <button class="btn btn-gold" onclick="exportData()">Export Everything (JSON)</button>
+    <button class="btn btn-outline" onclick="importData()">Import (JSON)</button>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  LA 2028 Olympics Family Ticket Planner &nbsp;|&nbsp; <a href="https://reedberg99.github.io/la28-planner/">reedberg99.github.io/la28-planner</a><br>
+  Availability auto-updated Mon &amp; Thu from Reddit &amp; news sources via GitHub Actions.<br>
+  Purchase tickets at <a href="https://tickets.la28.org" target="_blank">tickets.la28.org</a>
+</footer>
+
+<script>
+// ── Event data (static — prices, venues, dates) ────────────────────────────
+const events = [
+  {sport:"Opening Ceremony",        cat:"ceremony", venue:"SoFi + LA Coliseum",       dates:"Jul 14",    pL:329, pH:5000, kf:5, sess:"Evening"},
+  {sport:"Closing Ceremony",        cat:"ceremony", venue:"LA Memorial Coliseum",      dates:"Jul 30",    pL:200, pH:3500, kf:5, sess:"Evening"},
+  {sport:"Track & Field — Prelims", cat:"marquee",  venue:"LA Memorial Coliseum",      dates:"Jul 15-22", pL:28,  pH:807,  kf:4, sess:"Morning"},
+  {sport:"Track & Field — Finals",  cat:"marquee",  venue:"LA Memorial Coliseum",      dates:"Jul 15-22", pL:104, pH:2461, kf:5, sess:"Afternoon/Eve"},
+  {sport:"Swimming — Prelims",      cat:"marquee",  venue:"SoFi Stadium",              dates:"Jul 22-29", pL:50,  pH:807,  kf:4, sess:"Morning"},
+  {sport:"Swimming — Finals",       cat:"marquee",  venue:"SoFi Stadium",              dates:"Jul 22-29", pL:186, pH:1861, kf:5, sess:"Evening"},
+  {sport:"Gymnastics — Artistic",   cat:"marquee",  venue:"Crypto.com Arena",          dates:"Jul 19-27", pL:150, pH:2000, kf:5, sess:"Various"},
+  {sport:"Gymnastics — Rhythmic",   cat:"marquee",  venue:"Crypto.com Arena",          dates:"Jul 28-30", pL:80,  pH:800,  kf:5, sess:"Various"},
+  {sport:"Diving",                  cat:"marquee",  venue:"LA Aquatics Center",        dates:"Jul 19-30", pL:50,  pH:600,  kf:5, sess:"Various"},
+  {sport:"Basketball — Prelims",    cat:"team",     venue:"Intuit Dome",               dates:"Jul 15-28", pL:50,  pH:500,  kf:5, sess:"Various"},
+  {sport:"Basketball — Medals",     cat:"team",     venue:"Intuit Dome",               dates:"Jul 29-30", pL:200, pH:2500, kf:5, sess:"Various"},
+  {sport:"Soccer — Prelims",        cat:"team",     venue:"Rose Bowl / SoFi / DH",     dates:"Jul 12-26", pL:28,  pH:300,  kf:5, sess:"Various"},
+  {sport:"Soccer — Medals",         cat:"team",     venue:"Rose Bowl / SoFi",          dates:"Jul 28-30", pL:100, pH:1200, kf:5, sess:"Various"},
+  {sport:"Volleyball — Indoor",     cat:"team",     venue:"Galen Center (USC)",        dates:"Jul 15-30", pL:40,  pH:600,  kf:5, sess:"Various"},
+  {sport:"Beach Volleyball",        cat:"team",     venue:"Santa Monica Beach",        dates:"Jul 15-30", pL:28,  pH:500,  kf:5, sess:"Various"},
+  {sport:"Water Polo",              cat:"team",     venue:"LA Aquatics Center",        dates:"Jul 12-30", pL:28,  pH:300,  kf:4, sess:"Various"},
+  {sport:"Handball",                cat:"team",     venue:"The Forum (Inglewood)",     dates:"Jul 12-30", pL:28,  pH:250,  kf:4, sess:"Various"},
+  {sport:"Field Hockey",            cat:"team",     venue:"Sofi Park",                 dates:"Jul 12-29", pL:28,  pH:200,  kf:4, sess:"Various"},
+  {sport:"Rugby Sevens",            cat:"team",     venue:"Dignity Health SP",         dates:"Jul 12-16", pL:28,  pH:250,  kf:5, sess:"Various"},
+  {sport:"Flag Football",           cat:"new",      venue:"BMO Stadium",               dates:"Jul 15-22", pL:28,  pH:400,  kf:5, sess:"Various"},
+  {sport:"Cricket (T20)",           cat:"new",      venue:"Rose Bowl",                 dates:"Jul 15-25", pL:28,  pH:350,  kf:4, sess:"Various"},
+  {sport:"Lacrosse (Sixes)",        cat:"new",      venue:"BMO Stadium",               dates:"Jul 23-30", pL:28,  pH:300,  kf:4, sess:"Various"},
+  {sport:"Squash",                  cat:"new",      venue:"Downtown LA (TBD)",         dates:"Jul 15-25", pL:28,  pH:300,  kf:3, sess:"Various"},
+  {sport:"Baseball / Softball",     cat:"new",      venue:"Oklahoma City",             dates:"Jul 15-26", pL:28,  pH:250,  kf:5, sess:"Various"},
+  {sport:"Tennis",                  cat:"other",    venue:"LA Tennis Center (UCLA)",   dates:"Jul 15-28", pL:40,  pH:600,  kf:4, sess:"Various"},
+  {sport:"Table Tennis",            cat:"other",    venue:"LA Convention Center",      dates:"Jul 15-30", pL:28,  pH:200,  kf:5, sess:"Various"},
+  {sport:"Badminton",               cat:"other",    venue:"LA Convention Center",      dates:"Jul 15-30", pL:28,  pH:200,  kf:4, sess:"Various"},
+  {sport:"Boxing",                  cat:"other",    venue:"Galen Center (USC)",        dates:"Jul 15-30", pL:28,  pH:400,  kf:3, sess:"Various"},
+  {sport:"Cycling — Track",         cat:"other",    venue:"VELO Sports Center",        dates:"Jul 22-28", pL:40,  pH:300,  kf:4, sess:"Various"},
+  {sport:"Cycling — Road Race",     cat:"other",    venue:"LA Road Course",            dates:"Jul 21-22", pL:0,   pH:0,    kf:5, sess:"Free"},
+  {sport:"Cycling — BMX",           cat:"other",    venue:"BMX Venue (TBD)",           dates:"Jul 17-18", pL:28,  pH:150,  kf:5, sess:"Various"},
+  {sport:"Triathlon",               cat:"other",    venue:"Venice Beach",              dates:"Jul 15-17", pL:0,   pH:0,    kf:5, sess:"Free"},
+  {sport:"Skateboarding",           cat:"other",    venue:"TBD",                       dates:"Jul 18-22", pL:28,  pH:200,  kf:5, sess:"Various"},
+  {sport:"Surfing",                 cat:"other",    venue:"Teahupo'o, Tahiti",         dates:"Jul 15-21", pL:0,   pH:0,    kf:4, sess:"Shore"},
+  {sport:"Sport Climbing",          cat:"other",    venue:"Downtown LA (TBD)",         dates:"Jul 19-24", pL:28,  pH:200,  kf:5, sess:"Various"},
+  {sport:"Breaking (Breakdancing)", cat:"other",    venue:"TBD",                       dates:"Jul 26-27", pL:28,  pH:250,  kf:5, sess:"Various"},
+  {sport:"Fencing",                 cat:"other",    venue:"LA Convention Center",      dates:"Jul 15-26", pL:28,  pH:200,  kf:3, sess:"Various"},
+  {sport:"Judo",                    cat:"other",    venue:"TBD",                       dates:"Jul 15-22", pL:28,  pH:200,  kf:4, sess:"Various"},
+  {sport:"Taekwondo",               cat:"other",    venue:"TBD",                       dates:"Jul 23-27", pL:28,  pH:200,  kf:4, sess:"Various"},
+  {sport:"Wrestling",               cat:"other",    venue:"TBD",                       dates:"Jul 18-28", pL:28,  pH:200,  kf:3, sess:"Various"},
+  {sport:"Weightlifting",           cat:"other",    venue:"TBD",                       dates:"Jul 18-28", pL:28,  pH:150,  kf:3, sess:"Various"},
+  {sport:"Archery",                 cat:"other",    venue:"Sofi Park",                 dates:"Jul 16-24", pL:28,  pH:150,  kf:4, sess:"Various"},
+  {sport:"Shooting",                cat:"other",    venue:"Long Beach",                dates:"Jul 16-24", pL:28,  pH:100,  kf:3, sess:"Various"},
+  {sport:"Equestrian",              cat:"other",    venue:"Santa Anita Park",          dates:"Jul 17-28", pL:40,  pH:400,  kf:5, sess:"Various"},
+  {sport:"Modern Pentathlon",       cat:"other",    venue:"Multiple",                  dates:"Jul 27-28", pL:28,  pH:150,  kf:3, sess:"Various"},
+  {sport:"Sailing",                 cat:"other",    venue:"Long Beach Marina",         dates:"Jul 18-28", pL:0,   pH:0,    kf:4, sess:"Free"},
+  {sport:"Rowing",                  cat:"other",    venue:"Long Beach Marine Stadium", dates:"Jul 15-22", pL:28,  pH:150,  kf:3, sess:"Morning"},
+  {sport:"Canoe Sprint",            cat:"other",    venue:"Long Beach Marine Stadium", dates:"Jul 25-28", pL:28,  pH:150,  kf:3, sess:"Various"},
+  {sport:"Canoe Slalom",            cat:"other",    venue:"Oklahoma City",             dates:"Jul 16-22", pL:28,  pH:100,  kf:4, sess:"Various"},
+  {sport:"Artistic Swimming",       cat:"other",    venue:"LA Aquatics Center",        dates:"Jul 24-30", pL:40,  pH:300,  kf:5, sess:"Various"},
+  {sport:"Marathon Swimming",       cat:"other",    venue:"Long Beach",                dates:"Jul 24-25", pL:0,   pH:0,    kf:4, sess:"Free"},
+  {sport:"Golf",                    cat:"other",    venue:"Riviera Country Club",      dates:"Jul 18-25", pL:40,  pH:300,  kf:3, sess:"Daily"},
+  {sport:"Hockey (Field)",          cat:"other",    venue:"Sofi Park",                 dates:"Jul 12-29", pL:28,  pH:200,  kf:4, sess:"Various"},
+];
+
+// ── State ──────────────────────────────────────────────────────────────────
+let availData = {};
+let starred = new Set(JSON.parse(localStorage.getItem('la28_starred') || '[]'));
+let sortCol = -1, sortAsc = true;
+
+const STATUS_RANK = {soldout:5, premium:4, limited:3, available:2, free:1, unknown:0};
+
+// ── Load availability.json ─────────────────────────────────────────────────
+async function loadAvailability() {
+  try {
+    const res = await fetch('./availability.json?_=' + Date.now());
+    const json = await res.json();
+    availData = json.events || {};
+    document.getElementById('avail-source').textContent =
+      'Last updated ' + json.lastUpdated + ' · ' + (json.source || '');
+    document.getElementById('last-updated-header').textContent =
+      'Availability last refreshed: ' + json.lastUpdated;
+  } catch(e) {
+    console.warn('Could not load availability.json:', e);
+    document.getElementById('avail-source').textContent = 'Could not load live data';
+  }
+  document.getElementById('loading').style.display = 'none';
+  renderTable(events);
+  updateBudget();
+  loadNotes();
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function getAvail(sport) {
+  return availData[sport] || {status:'unknown', note:''};
+}
+
+function availBadge(sport) {
+  const a = getAvail(sport);
+  const map = {
+    soldout:  {cls:'avail-soldout',  label:'🔴 Sold Out'},
+    premium:  {cls:'avail-premium',  label:'🟠 Premium Only'},
+    limited:  {cls:'avail-limited',  label:'🟡 Limited'},
+    available:{cls:'avail-available',label:'🟢 Available'},
+    free:     {cls:'avail-free',     label:'🔵 Free'},
+    unknown:  {cls:'avail-unknown',  label:'⚪ Unknown'},
+  };
+  const m = map[a.status] || map.unknown;
+  const note = (a.note||'').replace(/"/g,'&quot;');
+  return `<span class="avail ${m.cls}" title="${note}" style="cursor:help;">${m.label}</span>`;
+}
+
+const catTag = {
+  marquee:  '<span class="tag tag-marquee">Marquee</span>',
+  team:     '<span class="tag tag-team">Team</span>',
+  ceremony: '<span class="tag tag-ceremony">Ceremony</span>',
+  new:      '<span class="tag tag-new">New Sport</span>',
+  other:    '<span class="tag tag-other">Other</span>',
+};
+
+function kidStars(n) {
+  return [...Array(5)].map((_,i)=>`<span style="color:${i<n?'var(--gold)':'var(--border)'}">★</span>`).join('');
+}
+
+function fmtPrice(l,h) {
+  if(!l&&!h) return '<span class="price-low">FREE</span>';
+  return `<span class="price-low">$${l}</span>–<span class="price-high">$${h}</span>`;
+}
+function fmtFamily(l,h) {
+  if(!l&&!h) return '<span class="price-low">FREE</span>';
+  return `$${l*4}–$${h*4}`;
+}
+
+// ── Table ──────────────────────────────────────────────────────────────────
+function renderTable(data) {
+  document.getElementById('events-body').innerHTML = data.map(e => {
+    const idx = events.indexOf(e);
+    const isStar = starred.has(idx);
+    return `<tr>
+      <td><span class="priority-star ${isStar?'filled':'empty'}" onclick="toggleStar(${idx})">${isStar?'★':'☆'}</span></td>
+      <td><strong>${e.sport}</strong><br><small style="color:var(--muted)">${e.sess}</small></td>
+      <td>${catTag[e.cat]||''}</td>
+      <td>${e.venue}</td>
+      <td>${e.dates}</td>
+      <td>${fmtPrice(e.pL,e.pH)}</td>
+      <td>${fmtFamily(e.pL,e.pH)}</td>
+      <td>${availBadge(e.sport)}</td>
+      <td>${kidStars(e.kf)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterTable() {
+  const s   = document.getElementById('search').value.toLowerCase();
+  const cat = document.getElementById('cat-f').value;
+  const av  = document.getElementById('avail-f').value;
+  const pr  = document.getElementById('price-f').value;
+  const so  = document.getElementById('starred-only').checked;
+  const filtered = events.filter((e,idx) => {
+    if(s && !e.sport.toLowerCase().includes(s) && !e.venue.toLowerCase().includes(s)) return false;
+    if(cat && e.cat!==cat) return false;
+    if(av  && getAvail(e.sport).status!==av) return false;
+    if(pr==='budget' && e.pL>100) return false;
+    if(pr==='mid' && (e.pH<100||e.pL>500)) return false;
+    if(pr==='premium-price' && (e.pH<500||e.pL>1000)) return false;
+    if(pr==='vip' && e.pH<1000) return false;
+    if(so && !starred.has(idx)) return false;
+    return true;
+  });
+  renderTable(filtered);
+}
+
+function sortTable(col) {
+  if(sortCol===col) sortAsc=!sortAsc; else {sortCol=col;sortAsc=true;}
+  const sorted=[...events].sort((a,b)=>{
+    const keys=[null,'sport','cat','venue','dates','pL','pL','status','kf'];
+    let va,vb;
+    if(col===7){va=STATUS_RANK[getAvail(a.sport).status]||0;vb=STATUS_RANK[getAvail(b.sport).status]||0;}
+    else{va=a[keys[col]];vb=b[keys[col]];}
+    if(typeof va==='string') return sortAsc?va.localeCompare(vb):vb.localeCompare(va);
+    return sortAsc?va-vb:vb-va;
+  });
+  renderTable(sorted);
+}
+
+function toggleStar(idx) {
+  starred.has(idx)?starred.delete(idx):starred.add(idx);
+  localStorage.setItem('la28_starred', JSON.stringify([...starred]));
+  filterTable();
+  document.getElementById('starred-count').textContent = starred.size;
+  updatePriorityList();
+  updateBudget();
+}
+
+// ── Priority list ──────────────────────────────────────────────────────────
+function updatePriorityList() {
+  const arr=[...starred];
+  const list=document.getElementById('priority-list');
+  const empty=document.getElementById('priority-empty');
+  if(!arr.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  list.innerHTML=arr.map((idx,rank)=>{
+    const e=events[idx];
+    const mid=Math.round((e.pL+e.pH)/2);
+    const a=getAvail(e.sport);
+    return `<li class="priority-item">
+      <div class="rank">#${rank+1}</div>
+      <div class="info">
+        <h4>${e.sport} ${availBadge(e.sport)}</h4>
+        <p>${e.venue} · ${e.dates} · ~$${mid*4} family mid-tier</p>
+      </div>
+      <button class="remove-btn" onclick="toggleStar(${idx})">✕</button>
+    </li>`;
+  }).join('');
+  const summary=document.getElementById('priority-budget-summary');
+  let lo=0,hi=0,mid=0;
+  arr.forEach(i=>{const e=events[i];lo+=e.pL*4;hi+=e.pH*4;mid+=Math.round((e.pL+e.pH)/2)*4;});
+  summary.innerHTML=`<p>Estimated range for <strong>${arr.length} events</strong> (family of 4):<br>
+    Budget: <strong style="color:var(--green)">$${lo.toLocaleString()}</strong> &nbsp;|&nbsp;
+    Mid-tier: <strong style="color:var(--gold)">$${mid.toLocaleString()}</strong> &nbsp;|&nbsp;
+    Premium: <strong style="color:var(--accent)">$${hi.toLocaleString()}</strong></p>`;
+}
+
+// ── Budget ─────────────────────────────────────────────────────────────────
+function updateBudget() {
+  const budget=parseInt(document.getElementById('total-budget').value)||0;
+  const arr=[...starred];
+  let total=0; const cats={};
+  arr.forEach(i=>{const e=events[i];const m=Math.round((e.pL+e.pH)/2)*4;total+=m;cats[e.cat]=(cats[e.cat]||0)+m;});
+  const pct=budget>0?Math.min(100,(total/budget)*100):0;
+  const rem=budget-total;
+  document.getElementById('budget-fill').style.width=pct+'%';
+  document.getElementById('budget-fill').style.background=rem<0?'var(--accent)':'var(--green)';
+  document.getElementById('budget-spent').textContent=total.toLocaleString();
+  document.getElementById('budget-remaining').textContent=rem.toLocaleString();
+  document.getElementById('budget-starred-total').textContent='$'+total.toLocaleString();
+  document.getElementById('budget-starred-total').style.color=rem<0?'var(--accent)':'var(--green)';
+  const names={ceremony:'Ceremonies',marquee:'Marquee',team:'Team Sports',new:'New Sports',other:'Other'};
+  document.getElementById('budget-breakdown').innerHTML=Object.entries(cats).map(([c,cost])=>{
+    const p=budget>0?(cost/budget*100).toFixed(1):0;
+    return `<div style="margin-bottom:0.8rem;"><div style="display:flex;justify-content:space-between;font-size:0.9rem;margin-bottom:0.3rem;"><span>${names[c]||c}</span><span>$${cost.toLocaleString()} (${p}%)</span></div><div class="budget-bar"><div class="budget-fill" style="width:${p}%;background:var(--gold);"></div></div></div>`;
+  }).join('')||'<p style="color:var(--muted)">Star events to see breakdown</p>';
+}
+
+// ── Seating viz ────────────────────────────────────────────────────────────
+const venues = {
+  coliseum:{name:"LA Memorial Coliseum",sport:"Track & Field",cap:"77,500",tiers:[
+    {l:"Cat A (Trackside)",$:"$2,461",f:"$9,844",c:"#ff4466",p:100},
+    {l:"Cat B",$:"$2,047",f:"$8,186",c:"#ff6644",p:85},
+    {l:"Cat C",$:"$1,364",f:"$5,457",c:"#ff8844",p:70},
+    {l:"Cat D",$:"$1,116",f:"$4,465",c:"#ffaa44",p:58},
+    {l:"Cat E",$:"$744",f:"$2,977",c:"#ffcc44",p:45},
+    {l:"Cat F",$:"$620",f:"$2,481",c:"#88cc44",p:35},
+    {l:"Cat G",$:"$403",f:"$1,612",c:"#44cc88",p:25},
+    {l:"Cat H",$:"$186",f:"$744",c:"#4488ee",p:15},
+    {l:"Cat I (Upper)",$:"$104",f:"$417",c:"#4466ff",p:8},
+  ]},
+  sofi:{name:"SoFi Stadium",sport:"Swimming",cap:"38,000",tiers:[
+    {l:"Cat A (Poolside)",$:"$1,861",f:"$7,442",c:"#ff4466",p:100},
+    {l:"Cat B",$:"$1,116",f:"$4,465",c:"#ff6644",p:75},
+    {l:"Cat C",$:"$807",f:"$3,225",c:"#ff8844",p:60},
+    {l:"Cat D",$:"$620",f:"$2,481",c:"#ffaa44",p:48},
+    {l:"Cat E",$:"$403",f:"$1,612",c:"#ffcc44",p:36},
+    {l:"Cat F",$:"$186",f:"$744",c:"#88cc44",p:24},
+    {l:"Cat G",$:"$93",f:"$372",c:"#44cc88",p:15},
+    {l:"Cat H (Upper)",$:"$50",f:"$198",c:"#4488ff",p:8},
+  ]},
+  crypto:{name:"Crypto.com Arena",sport:"Gymnastics",cap:"20,000",tiers:[
+    {l:"Cat A (Floor)",$:"~$2,000",f:"~$8,000",c:"#ff4466",p:100},
+    {l:"Cat B",$:"~$1,200",f:"~$4,800",c:"#ff8844",p:65},
+    {l:"Cat C",$:"~$600",f:"~$2,400",c:"#ffcc44",p:40},
+    {l:"Cat D",$:"~$300",f:"~$1,200",c:"#44cc88",p:22},
+    {l:"Cat E (Upper)",$:"~$150",f:"~$600",c:"#4488ff",p:10},
+  ]},
+  intuit:{name:"Intuit Dome",sport:"Basketball",cap:"18,000",tiers:[
+    {l:"Cat A (Courtside)",$:"~$2,500",f:"~$10,000",c:"#ff4466",p:100},
+    {l:"Cat B",$:"~$1,000",f:"~$4,000",c:"#ff8844",p:55},
+    {l:"Cat C",$:"~$500",f:"~$2,000",c:"#ffcc44",p:30},
+    {l:"Cat D",$:"~$200",f:"~$800",c:"#44cc88",p:15},
+    {l:"Cat E (Upper)",$:"~$50",f:"~$200",c:"#4488ff",p:6},
+  ]},
+  rosebowl:{name:"Rose Bowl",sport:"Soccer",cap:"90,888",tiers:[
+    {l:"Cat A (Pitch-side)",$:"~$1,200",f:"~$4,800",c:"#ff4466",p:100},
+    {l:"Cat B",$:"~$600",f:"~$2,400",c:"#ff8844",p:55},
+    {l:"Cat C",$:"~$300",f:"~$1,200",c:"#ffcc44",p:30},
+    {l:"Cat D",$:"~$100",f:"~$400",c:"#44cc88",p:12},
+    {l:"Cat E (Upper)",$:"~$28",f:"~$112",c:"#4488ff",p:4},
+  ]},
+  ceremony:{name:"SoFi Stadium",sport:"Opening/Closing Ceremonies",cap:"70,000+",tiers:[
+    {l:"Premium Floor",$:"~$5,000",f:"~$20,000",c:"#ff4466",p:100},
+    {l:"Lower Bowl A",$:"~$3,000",f:"~$12,000",c:"#ff8844",p:65},
+    {l:"Lower Bowl B",$:"~$1,500",f:"~$6,000",c:"#ffcc44",p:35},
+    {l:"Upper Bowl A",$:"~$700",f:"~$2,800",c:"#44cc88",p:17},
+    {l:"Upper Bowl B",$:"~$329",f:"~$1,316",c:"#4488ff",p:8},
+  ]},
+};
+
+function showVenueSeating() {
+  const k=document.getElementById('venue-selector').value;
+  const v=venues[k];
+  document.getElementById('seating-viz').innerHTML=`
+    <h2 style="color:var(--gold);margin-bottom:0.3rem;">${v.name}</h2>
+    <p style="color:var(--muted);margin-bottom:1.5rem;">${v.sport} · Capacity: ${v.cap}</p>
+    <div class="stage-area">${v.sport.includes('Swim')?'🏊 Pool':v.sport.includes('Basket')?'🏀 Court':v.sport.includes('Soccer')?'⚽ Pitch':'🏟 Field / Stage'}</div>
+    <div class="seating-tiers">
+      ${v.tiers.map(t=>`<div class="tier-row" style="background:${t.c}15;border-left:4px solid ${t.c};">
+        <div class="tier-label">${t.l}</div>
+        <div class="tier-bar"><div class="tier-bar-fill" style="width:${t.p}%;background:${t.c};"></div></div>
+        <div class="tier-price" style="color:${t.c};">${t.$}</div>
+        <div class="tier-family">${t.f} (×4)</div>
+      </div>`).join('')}
+    </div>
+    <p style="margin-top:1.5rem;font-size:0.8rem;color:var(--muted);">Prices per ticket (all-in, 24% service fee included). ~prices are estimates.</p>`;
+}
+
+// ── Notes ──────────────────────────────────────────────────────────────────
+function saveNotes() {
+  ['reed','partner','kids','logistics'].forEach(k=>{
+    localStorage.setItem('la28_notes_'+k, document.getElementById('notes-'+k).value);
+  });
+}
+function loadNotes() {
+  ['reed','partner','kids','logistics'].forEach(k=>{
+    document.getElementById('notes-'+k).value = localStorage.getItem('la28_notes_'+k)||'';
+  });
+}
+
+// ── Export / Import ────────────────────────────────────────────────────────
+function exportData() {
+  const data={
+    starred:[...starred],
+    budget: document.getElementById('total-budget').value,
+    notes:{
+      reed:     document.getElementById('notes-reed').value,
+      partner:  document.getElementById('notes-partner').value,
+      kids:     document.getElementById('notes-kids').value,
+      logistics:document.getElementById('notes-logistics').value,
+    },
+    exportDate: new Date().toISOString(),
+  };
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download='la28-family-plan.json'; a.click();
+}
+function importData() {
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange=e=>{
+    const fr=new FileReader();
+    fr.onload=ev=>{
+      try{
+        const d=JSON.parse(ev.target.result);
+        starred=new Set(d.starred||[]);
+        localStorage.setItem('la28_starred',JSON.stringify([...starred]));
+        if(d.budget) document.getElementById('total-budget').value=d.budget;
+        if(d.notes){
+          ['reed','partner','kids','logistics'].forEach(k=>{
+            document.getElementById('notes-'+k).value=d.notes[k]||'';
+          });
+          saveNotes();
+        }
+        filterTable(); updatePriorityList(); updateBudget();
+        document.getElementById('starred-count').textContent=starred.size;
+        alert('Imported successfully!');
+      }catch(err){alert('Import error: '+err.message);}
+    };
+    fr.readAsText(e.target.files[0]);
+  };
+  inp.click();
+}
+function clearAll(){if(confirm('Clear all starred events?')){starred.clear();localStorage.removeItem('la28_starred');filterTable();updatePriorityList();updateBudget();document.getElementById('starred-count').textContent=0;}}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function showPanel(id, btn) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(btn) btn.classList.add('active');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadAvailability();
+document.getElementById('starred-count').textContent = starred.size;
+showVenueSeating();
+updatePriorityList();
+</script>
+</body>
+</html>
